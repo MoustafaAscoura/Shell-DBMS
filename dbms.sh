@@ -2,6 +2,7 @@
 currentdb="";
 
 #Functions go here!
+#Table Functions
 function checktable {
         #Checks for table existence
         if [[ -f $1 ]]
@@ -10,6 +11,55 @@ function checktable {
         else    
                 return 0
         fi  
+};
+
+function join_by { 
+	local IFS="$1"; shift; echo "$*"; 
+};
+
+function getColIndex {
+	local tname=$1;
+	local colname=$2;
+	local IFS=":";
+	fields=($(head -1 $tname));
+	len=${#fields[@]}
+	res=-1;
+	for (( i=0; i<$len; i++ ));
+	do 
+		if [[ " $key " = " ${fields[$i]} " ]]; 
+		then
+				res=$i;
+				break;
+		fi; 
+	done;
+
+	return $res;
+};
+
+function checkDataType {
+	local value=$1;
+	local dtype=$2;
+	
+	case "${dtype}" in
+		'int')
+			if [[ $value = *([0-9]) ]]; then
+				return 1
+			else
+				return 0
+			fi
+		;;
+		'str')
+			if ! [[ $value = *([0-9]) ]]; then
+				return 1
+			else
+				return 0
+			fi
+		;;
+		*)
+			return 0
+		;;
+	esac
+            
 };
 
 function createtable {
@@ -30,7 +80,8 @@ function createtable {
 		if [[ nfields -ne nfields2 ]]; then
 			echo "Unmatched Number of Fields";
 			rm -f $tablename;
-			return 0; fi;
+			return 0; 
+		fi;
 
 		local IFS=":";
 		fields=($cols);
@@ -62,49 +113,33 @@ function createtable {
 	fi
 };
 
-function getColIndex {
-	local tname=$1;
-	local colname=$2;
-	local IFS=":";
-	fields=($(head -1 $tname));
-	len=${#fields[@]}
-	res=-1;
-	for (( i=0; i<$len; i++ ));
-	do 
-		if [[ " $key " = " ${fields[$i]} " ]]; 
-		then
-				res=$i;
-				break;
-		fi; 
-	done;
-
-	return $res;
-};
-
 function selectTable {
 	local tname=$1;
 	echo "This table headers are as follows:"; echo `head -1 $tname`;
-	printf '\nEnter the select query as follows:\nSELECT all or col1,..,coln WHERE colx=val "No Spaces!"\n';
+	printf '\nEnter the select query as follows:\nSELECT all or col1,..,coln WHERE {optional} colx=val "No Spaces!"\n';
 	read query; local IFS=" "; 	fields=($query);
 	condition=${fields[3]}; cols=${fields[1]};
-	key=$(echo $condition | cut -d= -f1)
-	searchval=$(echo $condition | cut -d= -f2)
-
-	local IFS=":";
-	headers=($(head -1 $tname));
-
-
-	getColIndex $tname $key;
-	colindex=$?;
-
-	if [[ $colindex -eq '255' ]]
+	if [[ ! -z $condition ]] #Check to see if condition given
 	then
-		echo "Cannot find Column: $key!"
-		return 0;
+			key=$(echo $condition | cut -d= -f1)
+			searchval=$(echo $condition | cut -d= -f2)
+			getColIndex $tname $key;
+			colindex=$?;
+
+			if [[ $colindex -eq '255' ]]
+			then
+				echo "Cannot find Column: $key!"
+				return 0;
+			fi
+
+			colindex=$(($colindex+1));
+			type=$(sed -n "2p" "$tname" | cut -d: -f $colindex);
 	fi
 
-
+	local IFS=":"; headers=($(head -1 $tname));
 	local IFS=","; cols=($cols);
+
+
 	if [[ $cols = "all" ]]
 	then
 		reqcols='all';
@@ -113,9 +148,10 @@ function selectTable {
 		len=${#cols[@]}
 		for (( i=0; i<$len; i++ ));
 		do 	
-			if [[ " ${headers[@]} " =~ " ${cols[$i]} " ]]; 
+			if [[ ! " ${headers[@]} " =~ " ${cols[$i]} " ]]; 
 			then
-				local reqcols+=("$i");
+				echo "Column ${cols[$i]} Not Found!"
+				return;
 			fi 
 		done
 		
@@ -130,19 +166,16 @@ function selectTable {
 		done
 	fi;
 
-
-
-	colindex=$(($colindex+1));
-	type=$(sed -n "2p" "$tname" | cut -d: -f $colindex);
-	
 	filelength=$(cat $tname | wc -l);
 	line_number=3
-	echo ${cols[@]};
+	if [[ $cols = "all" ]]
+	then join_by ":" ${headers[@]};
+	else echo ${cols[@]}; fi;
 	echo "==========";
 
 	while [ "$line_number" -le $filelength ]; do
 		line="$(sed -n "$line_number p" "$tname")"
-		if [ $(echo $line | cut -d: -f $colindex) = $searchval -a $type = 'str' ] || [ $(echo $line | cut -d: -f $colindex) -eq $searchval -a $type = 'int' ] 2> /dev/null
+		if [ -z $condition ] || [ $(echo $line | cut -d: -f $colindex) = $searchval -a $type = 'str' ] || [ $(echo $line | cut -d: -f $colindex) -eq $searchval -a $type = 'int' ] 2> /dev/null
 		then
 			if [[ $reqcols = "all" ]]
 			then
@@ -163,9 +196,45 @@ function selectTable {
 };
 
 function insertRow {
+	local tname=$1;
+	numOfColumns=$(head -1 $tname | awk -F: '{printf NF}');
+	local IFS=":";
+	headers=($(head -1 $tname));
+	types=($(head -2 $tname | tail -1));
+
+	printf "This Table has the following headers with corrosponding datatypes:\n";
+	printf "### $(echo ${headers[@]}) ###\n### $(echo ${types[@]})  ###";
+	printf "\n\nPlease Insert values in the right order and type comma separated\n";
+
+	#Reads and Check Column Names and Types
+	read row;
+	row=($(echo $row | sed 's/ *, */:/g'));
+
+	nfields=${#headers[@]};
+	#Check for equal number of fields
+	if [[ $nfields -ne ${#row[@]} ]]; then
+		echo "Unmatched Number of Fields";
+		return 0; 
+	fi;
+
+	for (( i=0; i<$nfields; i++ ));
+	do 	
+		local dtype=${types[$i]};
+		local value=${row[$i]};
+
+		checkDataType $value $dtype
+		if [[ $? -eq 0 ]]; 
+		then
+			echo "Insert $value Failed! Your Input must be $dtype"
+			return 0;
+		fi
+	done
+
+	join_by ":" ${row[@]} >> $tname;
 
 };
 
+#Database Functions
 function checkdb {
 	#Checks for database existence
 	if [[ $(ls ./databases 2> /dev/null | grep ^$1$ | wc -l) -eq 1 ]]
@@ -254,12 +323,12 @@ function connectdb {
 						fi
                     ;;
 
-
 #                      “Delete From Table”)
 #                       ;;
 #
 #                       “Update Table”)
 #                       ;;
+
 					'Disconnect')
 						cd ../../;
 						echo "Disconnected! You're back to the main menu.";
