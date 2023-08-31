@@ -1,5 +1,6 @@
 #!/usr/bin/bash
-currentdb="";
+
+##### Edit table funcitons to improve query
 
 #Functions go here!
 #Table Functions
@@ -114,11 +115,7 @@ function createtable {
 };
 
 function selectTable {
-	local tname=$1;
-	echo "This table headers are as follows:"; echo `head -1 $tname`;
-	printf '\nEnter the select query as follows:\nSELECT all or col1,..,coln WHERE {optional} colx=val "No Spaces!"\n';
-	read query; local IFS=" "; 	fields=($query);
-	condition=${fields[3]}; cols=${fields[1]};
+	tname=$1; cols=$2; condition=$3;
 	if [[ ! -z $condition ]] #Check to see if condition given
 	then
 			key=$(echo $condition | cut -d= -f1)
@@ -175,7 +172,7 @@ function selectTable {
 
 	while [ "$line_number" -le $filelength ]; do
 		line="$(sed -n "$line_number p" "$tname")"
-		if [ -z $condition ] || [ $(echo $line | cut -d: -f $colindex) = $searchval -a $type = 'str' ] || [ $(echo $line | cut -d: -f $colindex) -eq $searchval -a $type = 'int' ] 2> /dev/null
+		if [ -z $condition ] || [ $(echo $line | cut -d: -f $colindex) = $searchval ] 2> /dev/null
 		then
 			if [[ $reqcols = "all" ]]
 			then
@@ -232,6 +229,53 @@ function insertRow {
 
 	join_by ":" ${row[@]} >> $tname;
 
+};
+
+function deleteRow {
+	tname=$1;
+	condition=$2;
+
+	if [[ ! -z $condition ]] #Check to see if condition given
+	then
+			key=$(echo $condition | cut -d= -f1)
+			searchval=$(echo $condition | cut -d= -f2)
+			getColIndex $tname $key;
+			colindex=$?;
+
+			if [[ $colindex -eq '255' ]]
+			then
+				echo "Cannot find Column: $key!"
+				return 0;
+			fi
+
+	else
+		echo "No condition is given, will empty table cells but keep the table structure"
+	fi
+
+	local IFS=":"; headers=($(head -1 $tname));
+
+	filelength=$(cat $tname | wc -l);
+	line_number=3
+	set -x
+	while [ "$line_number" -le $filelength ]; do
+		line=($(sed -n "$line_number p" "$tname"));
+		if [ -z $condition ] || [ ${line[$colindex]} = $searchval ] 2> /dev/null
+		then
+			echo "Deleted entry == $line == Successfully!"
+			sed "$line_number d" $tname > "$tname new"
+			rm -f $tname
+			mv "$tname new" $tname;
+			filelength=$(cat $tname | wc -l);
+		else
+			line_number=$((line_number + 1))
+
+		fi
+	done
+	set +x
+};
+
+function updateTable {
+	echo "a";
 };
 
 #Database Functions
@@ -301,16 +345,23 @@ function connectdb {
 						fi
 					;;
 
+######### edit select to take cols and dtypes
+
 					'Select From Table')
-						read -p "Which Table to Select From? " tname;
+						printf '\nEnter the select query as follows:\nSelect {col1,..col2} FROM {TABLE} WHERE (optional) colx=val\n';
+						read query; local IFS=" "; 	fields=($query);
+						cols=${fields[1]};tname=${fields[3]}; condition=${fields[5]};
+
 						checktable $tname;
 						if [[ $? -eq 1 ]]
 						then
-							selectTable $tname;
+							selectTable $tname $cols $condition ;
 						else
 							echo "No Such Table!";
 						fi
 					;;
+
+######### edit insert
 
                     'Insert into Table')
 						read -p "Enter table Name: " tname;
@@ -323,11 +374,30 @@ function connectdb {
 						fi
                     ;;
 
-#                      “Delete From Table”)
-#                       ;;
-#
-#                       “Update Table”)
-#                       ;;
+                    'Delete From Table')
+						printf '\nEnter the delete query as follows:\nDelete FROM {TABLE} WHERE (optional) colx=val\n';
+						read query; local IFS=" "; 	fields=($query);
+						tname=${fields[2]}; condition=${fields[4]};
+
+						checktable $tname;
+						if [[ $? -eq 1 ]]
+						then
+							deleteRow $tname $condition;
+						else
+							echo "No Such Table!"
+						fi
+                    ;;
+
+					'Update Table')
+						read -p "Enter table Name to update: " tname;
+						checktable $tname;
+						if [[ $? -eq 1 ]]
+						then
+							updateTable $tname;
+						else
+							echo "No Such Table!"
+						fi
+                    ;;
 
 					'Disconnect')
 						cd ../../;
