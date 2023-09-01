@@ -1,7 +1,9 @@
 #!/usr/bin/bash
+mkdir databases 2> /dev/null;
+touch databases/primarykeys 2> /dev/null;
 
 #Functions go here!
-##Table Functions
+##Table Functions 
 function checktable {
         #Checks for table existence
         if [[ -f $1 ]]
@@ -66,7 +68,7 @@ function checkDataType {
 };
 
 function createtable {
-	tname=$1; pairs=$2;
+	tname=$1; pairs=$2; PK=$3;
 
 	#Reads and Check Column Names and Types1
 	local IFS=","; pairs=($pairs); 
@@ -99,7 +101,6 @@ function createtable {
 		fi
 	done
 
-	local IFS=":";
 	for type in "${types[@]}"
 	do
 		if [[ $type = "str" ]] || [[ $type = "int" ]] 
@@ -112,6 +113,18 @@ function createtable {
 		fi
 	done
 
+	getColIndex $tname $PK;
+	primarycol=$?;
+
+	if [[ $primarycol -eq '255' ]]
+	then
+		echo "Cannot find Column: $PK!"
+		rm -f $tname;
+		return 0;
+	else
+		sed -i "/$currentdb,$tname/d" ../primarykeys 2> /dev/null
+		echo "$currentdb,$tname=$PK" >> ../primarykeys;
+	fi
 };
 
 function selectTable {
@@ -195,6 +208,7 @@ function selectTable {
 function insertRow {
 	tname=$1;
 	row=$2;
+
 	local IFS=":";
 	headers=($(head -1 $tname));
 	types=($(head -2 $tname | tail -1));
@@ -202,10 +216,26 @@ function insertRow {
 	local IFS=","; row=($row);
 
 	#Check for equal number of fields
-	if [[ ${#headers[@]} -ne ${#row[@]} ]]; then
+	if [[ ${#headers[@]} -ne ${#row[@]} ]]
+	then
 		echo "Unmatched Number of Fields";
 		return 0; 
-	fi;
+	fi
+
+	#Check primary key column
+
+	PK=$( cat ../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
+	getColIndex $tname $PK
+	primaryfield=$?;
+	if [[ $primaryfield -ne '255' ]]
+	then
+		primarycol=$(sed -n '3,$p' $tname | cut -d: -f $(($primaryfield +1 )))
+		if [[ $( echo $primarycol | grep ${row[$primaryfield]} | wc -l) -ne 0 ]]
+		then
+			echo "Primary Key $PK Already Exists!"
+			return 0;
+		fi
+	fi
 
 	for (( i=0; i<${#headers[@]}; i++ ));
 	do 	
@@ -368,11 +398,11 @@ function connectdb {
 
 		case ${fields[0]} in
 			'create') 
-				tname=${fields[2]}; cols=${fields[3]};
+				tname=${fields[2]}; cols=${fields[3]}; PK=${fields[5]};
 				checktable $tname;
 				if [[ $? -eq 0 ]]
 				then
-					createtable $tname $cols;
+					createtable $tname $cols $PK;
 				else
 					echo "Table already exists!"
 				fi

@@ -12,7 +12,7 @@ chmod +x dbms.sh
 Then, simply execute the file.
 
 ```bash
-pip install foobar
+./dbms.sh
 ```
 
 ## Structure
@@ -51,7 +51,8 @@ QUIT
 ```Bash
 
 # Create a Table
-CREATE TABLE {Table Name} VALUES (col1=type1,col2=type2,...,coln=typen)';
+# PK requests the column to set it as a primary key and it's optional
+CREATE TABLE {Table Name} (col1=type1,col2=type2,...,coln=typen) PK colname';
 #types are (int) or (str) only!
 
 #List current tables
