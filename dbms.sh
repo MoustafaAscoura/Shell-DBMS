@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 #Functions go here!
-#Table Functions
+##Table Functions
 function checktable {
         #Checks for table existence
         if [[ -f $1 ]]
@@ -316,7 +316,7 @@ function updateTable {
 	
 };
 
-#Database Functions
+##Database Functions
 function checkdb {
 	#Checks for database existence
 	if [[ $(ls ./databases 2> /dev/null | grep ^$1$ | wc -l) -eq 1 ]]
@@ -349,124 +349,119 @@ function listdb {
 };
 
 function connectdb {
-        checkdb $1;
-        if [[ $? -eq 1 ]]
-        then
-			cd ./databases/$1; echo "Currently Connected to database $1";
-			select order in 'Create Table' 'List Tables' 'Drop Table' 'Insert into Table' 'Select From Table' 'Delete From Table' 'Update Table' 'Disconnect'
-			do
-				case $order in
-					'Create Table') 
-						printf '\nEnter the Create query as follows:\nCREATE TABLE {Table Name} VALUES (col1=type1,col2=type2,...,coln=typen)\n';
-						read query; 
-						query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '()');
-						local IFS=" "; fields=($query); tname=${fields[2]}; cols=${fields[4]};
-						checktable $tname;
-						if [[ $? -eq 0 ]]
-						then
-							createtable $tname $cols;
-						else
-							echo "Table already exists!"
-						fi
-						
-					;;
+	checkdb $1;
 
-                    'List Tables')
-						if [[ $(ls | wc -l) -eq 0 ]]
-						then
-							echo "No tables in this database!"
-						else
-							ls;
-						fi
-						
-                    ;;
-                    
-					'Drop Table')
-						printf '\nEnter the Drop query as follows:\DROP {Table Name}\n';
-						read query; query=$(tolowercase $query); local IFS=" "; fields=($query);
-						tname=${fields[1]};
-						checktable $tname;
-						if [[ $? -eq 0 ]]
-						then
-							echo "No such Table!"
-						else
-							rm -f $tname;
-							echo "Table $tname deleted!"
-						fi
-					;;
+	if [[ $? -eq 0 ]]
+	then
+		echo "No such Database!"
+		return 0;
+	fi
 
-					'Select From Table')
-						printf '\nEnter the select query as follows:\nSelect all or col1,..,coln FROM {TABLE} WHERE (optional) colx=val\n';
-						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g'));
-						local IFS=" "; fields=($query);
-						cols=${fields[1]};tname=${fields[3]}; condition=${fields[5]};
+	#export PS3="Database: $1 >>  "
+	cd ./databases/$1; echo "Currently Connected to database $1";
 
-						checktable $tname;
-						if [[ $? -eq 1 ]]
-						then
-							selectTable $tname $cols $condition ;
-						else
-							echo "No Such Table!";
-						fi
-					;;
+	while [[ 1 ]]
+	do
+		read -p "db: $1 >> " query;
+		query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '(;)'); #trimming
+		IFS=" "; fields=($query);
 
-                    'Insert into Table')
-						printf '\nEnter the insert query as follows:\nINSERT INTO {TABLE} VALUES (col1,col2,...coln)\n';
-						read query; 
-						set -x;
-						query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '()');
-						local IFS=" "; fields=($query);
-						tname=${fields[2]}; cols=${fields[4]};
+		case ${fields[0]} in
+			'create') 
+				tname=${fields[2]}; cols=${fields[3]};
+				checktable $tname;
+				if [[ $? -eq 0 ]]
+				then
+					createtable $tname $cols;
+				else
+					echo "Table already exists!"
+				fi
+			;;
 
-						checktable $tname;
-						if [[ $? -eq 1 ]]
-						then
-							insertRow $tname $cols;
-						else
-							echo "No Such Table!"
-						fi
-						set +x;
-                    ;;
+			'list')
+				if [[ $(ls | wc -l) -eq 0 ]]
+				then
+					echo "No tables in this database!"
+				else
+					ls;
+				fi
+				
+			;;
+			
+			'drop')
+				tname=${fields[1]};
+				checktable $tname;
+				if [[ $? -eq 0 ]]
+				then
+					echo "No such Table!"
+				else
+					rm -f $tname;
+					echo "Table $tname deleted!"
+				fi
+			;;
 
-                    'Delete From Table')
-						printf '\nEnter the delete query as follows:\nDelete FROM {TABLE} WHERE (optional) colx=val\n';
-						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g'))); local IFS=" "; fields=($query);
-						tname=${fields[2]}; condition=${fields[4]};
+			'select')
+				cols=${fields[1]};tname=${fields[3]}; condition=${fields[5]};
 
-						checktable $tname;
-						if [[ $? -eq 1 ]]
-						then
-							deleteRow $tname $condition;
-						else
-							echo "No Such Table!"
-						fi
-                    ;;
+				checktable $tname;
+				if [[ $? -eq 1 ]]
+				then
+					selectTable $tname $cols $condition ;
+				else
+					echo "No Such Table!";
+				fi
+			;;
 
-					'Update Table')
-						printf '\nEnter the update query as follows:\nUpdate {TABLE} SET colx=val\n WHERE (optional) colx=val\n';
-						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g'))); local IFS=" "; fields=($query);
-						tname=${fields[1]}; update=${fields[3]}; condition=${fields[5]};
+			'insert')
+				tname=${fields[2]}; cols=${fields[4]};
 
-						checktable $tname;
-						if [[ $? -eq 1 ]]
-						then
-							updateTable $tname $update $condition;
-						else
-							echo "No Such Table!"
-						fi
-                    ;;
+				checktable $tname;
+				if [[ $? -eq 1 ]]
+				then
+					insertRow $tname $cols;
+				else
+					echo "No Such Table!"
+				fi
+			;;
 
-					'Disconnect')
-						cd ../../;
-						echo "Disconnected! You're back to the main menu.";
-						break;;
+			'delete')
+				tname=${fields[2]}; condition=${fields[4]};
 
-					*) echo "Invalid Choice!";;
-					esac
-			done
-        else
-                echo "No such Database!"
-        fi
+				checktable $tname;
+				if [[ $? -eq 1 ]]
+				then
+					deleteRow $tname $condition;
+				else
+					echo "No Such Table!"
+				fi
+			;;
+
+			'update')
+				tname=${fields[1]}; update=${fields[3]}; condition=${fields[5]};
+
+				checktable $tname;
+				if [[ $? -eq 1 ]]
+				then
+					updateTable $tname $update $condition;
+				else
+					echo "No Such Table!"
+				fi
+			;;
+
+			'disconnect')
+				cd ../../;
+				echo "Disconnected! You're back to the main menu.";
+				break
+			;;
+
+			*) 
+			echo "Invalid Choice!"
+			;;
+			
+		esac
+	done
+    
+            
 };
 
 function deletedb {
@@ -483,26 +478,37 @@ function deletedb {
 			fi
 	fi
 }; 
-
 #End of Functions
 
-select choice in "Create Database" "List Databases" "Connect to Databases" "Drop Database"
+while [[ 1 ]]
 do
-	case $choice in 
-		"Create Database") read -p "Enter the name of your new database: " newdb;
-		newdb=$(tolowercase $newdb)
-		createdb $newdb;; #function db creates databases
+	#export PS3="Enter query >> ";
+	read -p "Enter query >> " query;
+	query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '(;)'); #trimming
+	IFS=" "; fields=($query);
 
-		"List Databases") listdb;;
+	case ${fields[0]} in 
+		"create")
+		newdb=$(tolowercase ${fields[2]})
+		createdb $newdb;;
 
-		"Connect to Databases") read -p "Enter the name of the desired database: " currentdb;
-		currentdb=$(tolowercase $currentdb)
+		"list") 
+		listdb;;
+
+		"connect") 
+		currentdb=$(tolowercase ${fields[2]})
 		connectdb $currentdb;;
 
-		"Drop Database") read -p "Which database to drop? " deleteddb;
-		deleteddb=$(tolowercase $deleteddb)
+		"drop")
+		deleteddb=$(tolowercase ${fields[2]})
 		deletedb $deleteddb;;
 
-		*) echo "Invalid Choice!"
+		"quit")
+		break
+		;;
+
+		*) echo "Invalid Command!"
 	esac
 done
+
+echo "Quitting..."
