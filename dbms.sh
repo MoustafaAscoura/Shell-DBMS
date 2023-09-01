@@ -1,7 +1,5 @@
 #!/usr/bin/bash
 
-##### Edit table funcitons to improve query
-
 #Functions go here!
 #Table Functions
 function checktable {
@@ -18,6 +16,10 @@ function join_by {
 	local IFS="$1"; shift; echo "$*"; 
 };
 
+function tolowercase {
+	echo $(echo $@ | tr '[:upper:]' '[:lower:]');
+};
+
 function getColIndex {
 	local tname=$1;
 	local colname=$2;
@@ -27,7 +29,7 @@ function getColIndex {
 	res=-1;
 	for (( i=0; i<$len; i++ ));
 	do 
-		if [[ " $key " = " ${fields[$i]} " ]]; 
+		if [[ " $colname " = " ${fields[$i]} " ]]; 
 		then
 				res=$i;
 				break;
@@ -64,54 +66,52 @@ function checkDataType {
 };
 
 function createtable {
-	tablename=$1;
-	checktable $tablename;
-	if [[ $? -eq 1 ]]
-	then
-		echo "Table already exists!"
-	else
-		#Reads and Check Column Names and Types1
-		read -p "Insert names of rows comma-separated: " cols;
-		cols=$(echo $cols | sed 's/ *, */:/g'); echo $cols > $tablename;
-		read -p "Insert type of each row comma-separated (str/int): " types;
-		types=$(echo $types | sed 's/ *, */:/g'); echo $types >> $tablename;
+	tname=$1; pairs=$2;
 
-		#Check for equal number of fields
-		nfields=$(echo $cols | awk -F: '{printf NF}'); nfields2=$(echo $types | awk -F: '{printf NF}');
-		if [[ nfields -ne nfields2 ]]; then
-			echo "Unmatched Number of Fields";
-			rm -f $tablename;
-			return 0; 
-		fi;
+	#Reads and Check Column Names and Types1
+	local IFS=","; pairs=($pairs); 
+	unset cols; unset types;
 
-		local IFS=":";
-		fields=($cols);
-		for field in "${fields[@]}"
-		do
-			if [[ $field =  *" "* ]] || [[ -z $field ]] 
-			then
-				echo "Table names cannot be empty or contain white spaces!"
-				rm -f $tablename;
-				return 0;
-			fi
-		done
+	local IFS="=";
+	for (( i=0; i<${#pairs[@]}; i++ ));
+	do 	
+		pair=(${pairs[$i]})
+		cols[$i]+=${pair[0]}
+		types[$i]+=${pair[1]}
+	done
+	
+	echo $(join_by ':' ${cols[@]}) > $tname; 
+	echo $(join_by ':' ${types[@]}) >> $tname;
+	#Check for equal number of fields
+	if [[ ${#cols[@]} -ne ${#types[@]} ]]; then
+		echo "Unmatched Number of Fields";
+		rm -f $tname;
+		return 0; 
+	fi;
 
-		local IFS=":";
-		fields=($types);
-		types=('int' 'str');
-		for field in "${fields[@]}"
-		do
-			if [[ $field = "str" ]] || [[ $field = "int" ]] 
-			then
-				continue;
-			else
-				echo "Invalid Type Found! $field"
-				rm -f $tablename;
-				return 0;
-			fi
-		done
+	for col in "${cols[@]}"
+	do
+		if [[ $col =  *" "* ]] || [[ -z $col ]] 
+		then
+			echo "Table names cannot be empty or contain white spaces!"
+			rm -f $tname;
+			return 0;
+		fi
+	done
 
-	fi
+	local IFS=":";
+	for type in "${types[@]}"
+	do
+		if [[ $type = "str" ]] || [[ $type = "int" ]] 
+		then
+			continue;
+		else
+			echo "Invalid Type Found! $type"
+			rm -f $tname;
+			return 0;
+		fi
+	done
+
 };
 
 function selectTable {
@@ -193,28 +193,21 @@ function selectTable {
 };
 
 function insertRow {
-	local tname=$1;
-	numOfColumns=$(head -1 $tname | awk -F: '{printf NF}');
+	tname=$1;
+	row=$2;
 	local IFS=":";
 	headers=($(head -1 $tname));
 	types=($(head -2 $tname | tail -1));
 
-	printf "This Table has the following headers with corrosponding datatypes:\n";
-	printf "### $(echo ${headers[@]}) ###\n### $(echo ${types[@]})  ###";
-	printf "\n\nPlease Insert values in the right order and type comma separated\n";
+	local IFS=","; row=($row);
 
-	#Reads and Check Column Names and Types
-	read row;
-	row=($(echo $row | sed 's/ *, */:/g'));
-
-	nfields=${#headers[@]};
 	#Check for equal number of fields
-	if [[ $nfields -ne ${#row[@]} ]]; then
+	if [[ ${#headers[@]} -ne ${#row[@]} ]]; then
 		echo "Unmatched Number of Fields";
 		return 0; 
 	fi;
 
-	for (( i=0; i<$nfields; i++ ));
+	for (( i=0; i<${#headers[@]}; i++ ));
 	do 	
 		local dtype=${types[$i]};
 		local value=${row[$i]};
@@ -226,9 +219,7 @@ function insertRow {
 			return 0;
 		fi
 	done
-
 	join_by ":" ${row[@]} >> $tname;
-
 };
 
 function deleteRow {
@@ -256,7 +247,6 @@ function deleteRow {
 
 	filelength=$(cat $tname | wc -l);
 	line_number=3
-	set -x
 	while [ "$line_number" -le $filelength ]; do
 		line=($(sed -n "$line_number p" "$tname"));
 		if [ -z $condition ] || [ ${line[$colindex]} = $searchval ] 2> /dev/null
@@ -271,11 +261,59 @@ function deleteRow {
 
 		fi
 	done
-	set +x
 };
 
 function updateTable {
-	echo "a";
+	tname=$1; update=$2; condition=$3;
+
+	local IFS=":";
+	headers=($(head -1 $tname));
+	types=($(head -2 $tname | tail -1));
+	newkey=$(echo $update | cut -d= -f1);
+	newval=$(echo $update | cut -d= -f2);
+	getColIndex $tname $newkey; changecol=$?;
+
+	dtype=${types[$changecol]};
+	checkDataType $newval $dtype
+	if [[ $? -eq 0 ]]; 
+	then
+		echo "Updating $newkey Failed! Your Input must be $dtype"
+		return 0;
+	fi
+
+	if [[ ! -z $condition ]] #Check to see if condition given
+	then
+			key=$(echo $condition | cut -d= -f1)
+			searchval=$(echo $condition | cut -d= -f2)
+			getColIndex $tname $key; colindex=$?;
+
+			if [[ $colindex -eq '255' ]]
+			then
+				echo "Cannot find Column: $key!"
+				return 0;
+			fi
+
+
+
+	else
+		echo "No condition is given, will empty table cells but keep the table structure"
+	fi
+
+	filelength=$(cat $tname | wc -l);
+	line_number=3
+	while [ "$line_number" -le $filelength ]; do
+		line=($(sed -n "$line_number p" "$tname"))
+		if [ -z $condition ] || [ ${line[$colindex]} = $searchval ] 2> /dev/null
+		then
+
+			oldval=${line[$changecol]};
+			sed -i "$line_number s/[^:]*/$newval/"$(($changecol+1)) $tname
+
+		fi
+		line_number=$((line_number + 1))
+
+	done
+	
 };
 
 #Database Functions
@@ -319,8 +357,18 @@ function connectdb {
 			do
 				case $order in
 					'Create Table') 
-						read -p "Insert name of table: " tname;
-						createtable $tname
+						printf '\nEnter the Create query as follows:\nCREATE TABLE {Table Name} VALUES (col1=type1,col2=type2,...,coln=typen)\n';
+						read query; 
+						query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '()');
+						local IFS=" "; fields=($query); tname=${fields[2]}; cols=${fields[4]};
+						checktable $tname;
+						if [[ $? -eq 0 ]]
+						then
+							createtable $tname $cols;
+						else
+							echo "Table already exists!"
+						fi
+						
 					;;
 
                     'List Tables')
@@ -334,7 +382,9 @@ function connectdb {
                     ;;
                     
 					'Drop Table')
-						read -p "Which table to drop? " tname;
+						printf '\nEnter the Drop query as follows:\DROP {Table Name}\n';
+						read query; query=$(tolowercase $query); local IFS=" "; fields=($query);
+						tname=${fields[1]};
 						checktable $tname;
 						if [[ $? -eq 0 ]]
 						then
@@ -345,11 +395,10 @@ function connectdb {
 						fi
 					;;
 
-######### edit select to take cols and dtypes
-
 					'Select From Table')
-						printf '\nEnter the select query as follows:\nSelect {col1,..col2} FROM {TABLE} WHERE (optional) colx=val\n';
-						read query; local IFS=" "; 	fields=($query);
+						printf '\nEnter the select query as follows:\nSelect all or col1,..,coln FROM {TABLE} WHERE (optional) colx=val\n';
+						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g'));
+						local IFS=" "; fields=($query);
 						cols=${fields[1]};tname=${fields[3]}; condition=${fields[5]};
 
 						checktable $tname;
@@ -361,22 +410,27 @@ function connectdb {
 						fi
 					;;
 
-######### edit insert
-
                     'Insert into Table')
-						read -p "Enter table Name: " tname;
+						printf '\nEnter the insert query as follows:\nINSERT INTO {TABLE} VALUES (col1,col2,...coln)\n';
+						read query; 
+						set -x;
+						query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g') | sed 's/ *, */,/g') | tr -d '()');
+						local IFS=" "; fields=($query);
+						tname=${fields[2]}; cols=${fields[4]};
+
 						checktable $tname;
 						if [[ $? -eq 1 ]]
 						then
-							insertRow $tname;
+							insertRow $tname $cols;
 						else
 							echo "No Such Table!"
 						fi
+						set +x;
                     ;;
 
                     'Delete From Table')
 						printf '\nEnter the delete query as follows:\nDelete FROM {TABLE} WHERE (optional) colx=val\n';
-						read query; local IFS=" "; 	fields=($query);
+						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g'))); local IFS=" "; fields=($query);
 						tname=${fields[2]}; condition=${fields[4]};
 
 						checktable $tname;
@@ -389,11 +443,14 @@ function connectdb {
                     ;;
 
 					'Update Table')
-						read -p "Enter table Name to update: " tname;
+						printf '\nEnter the update query as follows:\nUpdate {TABLE} SET colx=val\n WHERE (optional) colx=val\n';
+						read query; query=$(tolowercase $(echo $(echo $query | sed 's/ *= */=/g'))); local IFS=" "; fields=($query);
+						tname=${fields[1]}; update=${fields[3]}; condition=${fields[5]};
+
 						checktable $tname;
 						if [[ $? -eq 1 ]]
 						then
-							updateTable $tname;
+							updateTable $tname $update $condition;
 						else
 							echo "No Such Table!"
 						fi
@@ -433,14 +490,17 @@ select choice in "Create Database" "List Databases" "Connect to Databases" "Drop
 do
 	case $choice in 
 		"Create Database") read -p "Enter the name of your new database: " newdb;
+		newdb=$(tolowercase $newdb)
 		createdb $newdb;; #function db creates databases
 
 		"List Databases") listdb;;
 
 		"Connect to Databases") read -p "Enter the name of the desired database: " currentdb;
+		currentdb=$(tolowercase $currentdb)
 		connectdb $currentdb;;
 
 		"Drop Database") read -p "Which database to drop? " deleteddb;
+		deleteddb=$(tolowercase $deleteddb)
 		deletedb $deleteddb;;
 
 		*) echo "Invalid Choice!"

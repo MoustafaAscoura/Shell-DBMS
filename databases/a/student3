@@ -1,0 +1,6 @@
+fname:lname:age:grade:address
+str:str:int:int:str
+moustafa:ibrahim:20:5:cairo
+moustafa:ahmed:15:6:giza
+yasser:ibrahim:20:5:cairo
+moustafa:gamal:50:10:giza
