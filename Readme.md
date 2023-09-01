@@ -52,7 +52,7 @@ QUIT
 
 # Create a Table
 # PK requests the column to set it as a primary key and it's optional
-CREATE TABLE {Table Name} (col1=type1,col2=type2,...,coln=typen) PK colname';
+CREATE TABLE {Table Name} (col1=type1,col2=type2,...,coln=typen) PK (optional) colname';
 #types are (int) or (str) only!
 
 #List current tables
@@ -77,6 +77,10 @@ UPDATE {TABLE} SET colx=val\n WHERE (optional) colx=val
 DISCONNECT
 
 ```
+## Improvement Regions and Future Steps
+1 - Support more data types
+2 - Add more UPDATE features
+3 - Beautify the data output
 
 ## Contributing
 
