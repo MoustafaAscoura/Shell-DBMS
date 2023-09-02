@@ -92,3 +92,4 @@ Please make sure to update tests as appropriate.
 ## License
 
 Free! But do not copy for your own sake. Make one instead and use this as guide only. <3
+![This is a smaple image](./_117310488_16.jpg)
