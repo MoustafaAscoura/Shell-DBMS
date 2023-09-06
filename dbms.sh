@@ -73,8 +73,15 @@ function createtable {
 	#Reads and Check Column Names and Types1
 	local IFS=","; pairs=($pairs); 
 	unset cols; unset types;
-
+	set -x 
 	local IFS="=";
+ 	num_unique=$(printf "%s\n" "${pairs[@]}" | sort -u | wc -l)
+  	if [[ $num_unique -ne ${#pairs[@]} ]]
+   	then
+    		echo "Table cannot have two columns with the same name!"
+		return 0;
+  	fi
+  	set +x
 	for (( i=0; i<${#pairs[@]}; i++ ));
 	do 	
 		pair=(${pairs[$i]})
@@ -112,19 +119,20 @@ function createtable {
 			return 0;
 		fi
 	done
-
+	set -x
 	getColIndex $tname $PK;
 	primarycol=$?;
 
-	if [[ $primarycol -eq '255' ]]
+	if [[ $primarycol -ne '255' ]] || [[ -z $PK ]]
 	then
-		echo "Cannot find Column: $PK!"
+		sed -i "/$currentdb,$tname/d" ../primarykeys 2> /dev/null #To delete any prior values in the file if exists
+		echo "$currentdb,$tname=$PK" >> ../primarykeys;
+	else
+		echo "Cannot find Column: $PK to be set as a primary key!"
 		rm -f $tname;
 		return 0;
-	else
-		sed -i "/$currentdb,$tname/d" ../primarykeys 2> /dev/null
-		echo "$currentdb,$tname=$PK" >> ../primarykeys;
 	fi
+	
 };
 
 function selectTable {
@@ -179,7 +187,7 @@ function selectTable {
 	filelength=$(cat $tname | wc -l);
 	line_number=3
 	if [[ $cols = "all" ]]
-	then join_by ":" ${headers[@]};
+	then echo $(join_by ":" ${headers[@]});
 	else echo ${cols[@]}; fi;
 	echo "==========";
 
