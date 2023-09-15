@@ -74,12 +74,7 @@ function createtable {
 	local IFS=","; pairs=($pairs); 
 	unset cols; unset types;
 	local IFS="=";
- 	num_unique=$(printf "%s\n" "${pairs[@]}" | sort -u | wc -l)
-  	if [[ $num_unique -ne ${#pairs[@]} ]]
-   	then
-    		echo "Table cannot have two columns with the same name!"
-		return 0;
-  	fi
+
 	for (( i=0; i<${#pairs[@]}; i++ ));
 	do 	
 		pair=(${pairs[$i]})
@@ -87,15 +82,24 @@ function createtable {
 		types[$i]+=${pair[1]}
 	done
 	
+	num_unique=$(printf "%s\n" "${cols[@]}" | sort -u | wc -l)
+  	if [[ $num_unique -ne ${#cols[@]} ]]
+   	then
+    		echo "Table cannot have two columns with the same name!"
+		return 0;
+  	fi
+
 	echo $(join_by ':' ${cols[@]}) > $tname; 
 	echo $(join_by ':' ${types[@]}) >> $tname;
 	#Check for equal number of fields
+
 	if [[ ${#cols[@]} -ne ${#types[@]} ]]; then
 		echo "Unmatched Number of Fields";
 		rm -f $tname;
 		return 0; 
 	fi;
 
+	#Check for validity of column names
 	for col in "${cols[@]}"
 	do
 		if [[ $col =  *" "* ]] || [[ -z $col ]] 
@@ -105,6 +109,7 @@ function createtable {
 			return 0;
 		fi
 	done
+
 
 	for type in "${types[@]}"
 	do
@@ -117,6 +122,7 @@ function createtable {
 			return 0;
 		fi
 	done
+	
 	getColIndex $tname $PK;
 	primarycol=$?;
 
