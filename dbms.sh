@@ -122,7 +122,7 @@ function createtable {
 			return 0;
 		fi
 	done
-	
+
 	getColIndex $tname $PK;
 	primarycol=$?;
 
@@ -238,6 +238,7 @@ function insertRow {
 	PK=$( cat ../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
 	getColIndex $tname $PK
 	primaryfield=$?;
+
 	if [[ $primaryfield -ne '255' ]]
 	then
 		primarycol=$(sed -n '3,$p' $tname | cut -d: -f $(($primaryfield +1 )))
@@ -260,6 +261,7 @@ function insertRow {
 			return 0;
 		fi
 	done
+
 	join_by ":" ${row[@]} >> $tname;
 };
 
@@ -299,7 +301,6 @@ function deleteRow {
 			filelength=$(cat $tname | wc -l);
 		else
 			line_number=$((line_number + 1))
-
 		fi
 	done
 };
@@ -322,6 +323,21 @@ function updateTable {
 		return 0;
 	fi
 
+	#Check primary key column
+
+	PK=$( cat ../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
+	getColIndex $tname $PK
+
+	if [[ $? -ne '255' ]]
+	then
+		changecolfield=$(sed -n '3,$p' $tname | cut -d: -f $(($changecol +1 )))
+		if [[ $( echo $changecolfield | grep ${row[$changecol]} | wc -l) -ne 0 ]]
+		then
+			echo "Primary Key $PK Already Exists!"
+			return 0;
+		fi
+	fi
+
 	if [[ ! -z $condition ]] #Check to see if condition given
 	then
 			key=$(echo $condition | cut -d= -f1)
@@ -334,10 +350,8 @@ function updateTable {
 				return 0;
 			fi
 
-
-
 	else
-		echo "No condition is given, will empty table cells but keep the table structure"
+		echo "No condition is given, will update all table cells"
 	fi
 
 	filelength=$(cat $tname | wc -l);
