@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 mkdir databases 2> /dev/null;
-touch databases/primarykeys 2> /dev/null;
+touch primarykeys 2> /dev/null;
 
 #Functions go here!
 ##Table Functions 
@@ -69,6 +69,12 @@ function checkDataType {
 
 function createtable {
 	tname=$1; pairs=$2; PK=$3;
+	
+	if [[ ! (( $tname =~ ^[a-z]+[a-z_0-9]*$ )) ]]
+	then
+		echo "Enter a valid name!"
+		return 0
+	fi
 
 	#Reads and Check Column Names and Types1
 	local IFS=","; pairs=($pairs); 
@@ -82,6 +88,17 @@ function createtable {
 		types[$i]+=${pair[1]}
 	done
 	
+	#Check for validity of column names
+	for col in "${cols[@]}"
+	do
+		if [[ ! (( $col =~ ^[a-z]+[a-z_0-9]*$ )) ]]
+		then
+			echo "Invalid Column Name! $col"
+			rm -f $tname;
+			return 0;
+		fi
+	done
+
 	num_unique=$(printf "%s\n" "${cols[@]}" | sort -u | wc -l)
   	if [[ $num_unique -ne ${#cols[@]} ]]
    	then
@@ -99,16 +116,7 @@ function createtable {
 		return 0; 
 	fi;
 
-	#Check for validity of column names
-	for col in "${cols[@]}"
-	do
-		if [[ $col =  *" "* ]] || [[ -z $col ]] 
-		then
-			echo "Table names cannot be empty or contain white spaces!"
-			rm -f $tname;
-			return 0;
-		fi
-	done
+
 
 
 	for type in "${types[@]}"
@@ -128,8 +136,8 @@ function createtable {
 
 	if [[ $primarycol -ne '255' ]] || [[ -z $PK ]]
 	then
-		sed -i "/$currentdb,$tname/d" ../primarykeys 2> /dev/null #To delete any prior values in the file if exists
-		echo "$currentdb,$tname=$PK" >> ../primarykeys;
+		sed -i "/$currentdb,$tname/d" ../../primarykeys 2> /dev/null #To delete any prior values in the file if exists
+		echo "$currentdb,$tname=$PK" >> ../../primarykeys;
 	else
 		echo "Cannot find Column: $PK to be set as a primary key!"
 		rm -f $tname;
@@ -235,7 +243,7 @@ function insertRow {
 
 	#Check primary key column
 
-	PK=$( cat ../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
+	PK=$( cat ../../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
 	getColIndex $tname $PK
 	primaryfield=$?;
 
@@ -253,6 +261,12 @@ function insertRow {
 	do 	
 		local dtype=${types[$i]};
 		local value=${row[$i]};
+
+		if [[ ! (( $value =~ ^[a-z_0-9]+$ )) ]] 
+		then
+			echo "Invalid Value $value"
+			return 0
+		fi
 
 		checkDataType $value $dtype
 		if [[ $? -eq 0 ]]; 
@@ -307,12 +321,20 @@ function deleteRow {
 
 function updateTable {
 	tname=$1; update=$2; condition=$3;
+	
+	newkey=$(echo $update | cut -d= -f1);
+	newval=$(echo $update | cut -d= -f2);
+
+	if [[ ! (( $newval =~ ^[a-z_0-9]+$ )) ]] 
+		then
+			echo "Invalid Value $newval"
+			return 0
+	fi
 
 	local IFS=":";
 	headers=($(head -1 $tname));
 	types=($(head -2 $tname | tail -1));
-	newkey=$(echo $update | cut -d= -f1);
-	newval=$(echo $update | cut -d= -f2);
+
 	getColIndex $tname $newkey; changecol=$?;
 
 	dtype=${types[$changecol]};
@@ -325,11 +347,12 @@ function updateTable {
 
 	#Check primary key column
 
-	PK=$( cat ../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
+	PK=$( cat ../../primarykeys | grep "$currentdb,$tname" | cut -d= -f2 2> /dev/null ) 
 	getColIndex $tname $PK
 
 	if [[ $? -ne '255' ]]
 	then
+
 		changecolfield=$(sed -n '3,$p' $tname | cut -d: -f $(($changecol +1 )))
 		if [[ $( echo $changecolfield | grep ${row[$changecol]} | wc -l) -ne 0 ]]
 		then
@@ -361,6 +384,7 @@ function updateTable {
 		if [ -z $condition ] || [ ${line[$colindex]} = $searchval ] 2> /dev/null
 		then
 
+
 			oldval=${line[$changecol]};
 			sed -i "$line_number s/[^:]*/$newval/"$(($changecol+1)) $tname
 
@@ -388,12 +412,12 @@ function createdb {
 	then
 		echo "Database $1 already exists!, cannot create!";	
 	else
-		if [[ -z "$1" ]]
+		if [[ $1 =~ ^[a-z]+[a-z_0-9]*$ ]]
 		then
-			echo "Enter a valid name!"
-		else
 			mkdir -p ./databases/$1;
 			echo "Created a new database: $1"
+		else
+			echo "Enter a valid name!"
 		fi
 	fi
 };
