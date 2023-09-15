@@ -73,7 +73,6 @@ function createtable {
 	#Reads and Check Column Names and Types1
 	local IFS=","; pairs=($pairs); 
 	unset cols; unset types;
-	set -x 
 	local IFS="=";
  	num_unique=$(printf "%s\n" "${pairs[@]}" | sort -u | wc -l)
   	if [[ $num_unique -ne ${#pairs[@]} ]]
@@ -81,7 +80,6 @@ function createtable {
     		echo "Table cannot have two columns with the same name!"
 		return 0;
   	fi
-  	set +x
 	for (( i=0; i<${#pairs[@]}; i++ ));
 	do 	
 		pair=(${pairs[$i]})
@@ -119,7 +117,6 @@ function createtable {
 			return 0;
 		fi
 	done
-	set -x
 	getColIndex $tname $PK;
 	primarycol=$?;
 
